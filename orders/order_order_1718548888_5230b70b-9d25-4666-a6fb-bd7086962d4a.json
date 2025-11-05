@@ -1,0 +1,15 @@
+{
+    "order_details": {
+        "order_id": "order_1718548888",
+        "product": "Samsung Galaxy S23 Ultra",
+        "color": "Phantom Black",
+        "storage": "512GB",
+        "quantity": 1,
+        "total_price": 32990000,
+        "customer_info": {
+            "customer_name": "Nguyễn Văn Trọng",
+            "conversation_id": "5230b70b-9d25-4666-a6fb-bd7086962d4a"
+        }
+    },
+    "message": "Đơn hàng đã được tạo."
+}

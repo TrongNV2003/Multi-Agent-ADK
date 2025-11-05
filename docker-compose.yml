@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: agentadk_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=inventory_db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - agentadk_network
+
+  mcp_server:
+    container_name: agentadk_mcp_server
+    build: .
+    command: ["python", "-u", "mcp_server.py"]
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - agentadk_network
+    restart: unless-stopped
+
+  streamlit_ui:
+    container_name: agentadk_streamlit
+    build: .
+    command: ["python", "-m", "streamlit", "run", "src/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      - mcp_server
+    networks:
+      - agentadk_network
+    restart: unless-stopped
+
+networks:
+  agentadk_network:
+    driver: bridge
+
+volumes:
+  mongo_data:

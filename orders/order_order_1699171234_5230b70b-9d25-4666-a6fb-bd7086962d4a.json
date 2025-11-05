@@ -1,0 +1,15 @@
+{
+    "order_details": {
+        "order_id": "order_1699171234",
+        "product": "iPhone 15 Pro Max",
+        "color": "Titan tự nhiên",
+        "storage": "256GB",
+        "quantity": 1,
+        "total_price": 27990000,
+        "customer_info": {
+            "customer_name": "Nguyễn Văn Trọng",
+            "conversation_id": "5230b70b-9d25-4666-a6fb-bd7086962d4a"
+        }
+    },
+    "message": "Đơn hàng đã được tạo."
+}

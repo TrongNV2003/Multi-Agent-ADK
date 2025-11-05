@@ -1,0 +1,15 @@
+{
+    "order_details": {
+        "order_id": "order_1699171848",
+        "product": "Samsung Galaxy S23 Ultra",
+        "color": "Unknown",
+        "storage": "Unknown",
+        "quantity": 1,
+        "total_price": 0,
+        "customer_info": {
+            "customer_name": "Nguyễn Văn Trọng",
+            "conversation_id": "7af3d8a6-1770-4ee3-b21b-9e5607239b12"
+        }
+    },
+    "message": "Đơn hàng đã được tạo."
+}
