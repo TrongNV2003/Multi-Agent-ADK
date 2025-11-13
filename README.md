@@ -35,12 +35,12 @@ User Query → Analysis Agent → Inventory Agent → Order Agent → Consultant
 #### Agent Card (A2A) Pattern
 ```
 User Query → Analysis Agent
-         ↓ (registry lookup)
-       Inventory Agent ──┐
-         ↓               │
-       Order Agent ──────┘
-         ↓
-       Consultant Agent → Final Response
+                    ↓ (registry lookup)
+                  Inventory Agent ──┐
+                    ↓               │
+                  Order Agent ──────┘
+                    ↓
+                  Consultant Agent → Final Response
 
 MCP tools are triggered inside dedicated handlers so every call hits the real SSE server.
 ```
