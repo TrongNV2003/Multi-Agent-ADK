@@ -14,7 +14,7 @@ from src.agents.agents_react import (
 )
 from src.tools.create_order import create_customer_order
 from src.tools.get_products import check_inventory_detail
-from src.utils.react_executor import create_tool_executor_for_pipeline
+from src.handlers.react_executor import create_tool_executor_for_pipeline
 from src.config.settings import api_config
 
 
