@@ -4,7 +4,7 @@ import asyncio
 import streamlit as st
 from loguru import logger
 
-from src.pipeline_react import MultiAgentsReAct
+from src.pipeline_a2a import A2APipeline
 
 
 st.set_page_config(
@@ -74,11 +74,11 @@ st.markdown("# :rainbow[Agentias - Multi-Agent System]")
 st.sidebar.header("Cài đặt")
 
 if "pipeline" not in st.session_state:
-    st.session_state.pipeline = MultiAgentsReAct()
-    logger.info("MultiAgentsReAct pipeline initialized")
+    st.session_state.pipeline = A2APipeline()
 
 st.sidebar.subheader("Thông tin khách hàng")
 customer_name = st.sidebar.text_input("Tên khách hàng", value="Nguyễn Văn Trọng")
+customer_phone = st.sidebar.text_input("Số điện thoại", value="0987654321")
 previous_interactions = st.sidebar.text_area("Lịch sử tương tác", value="Đã từng hỏi về iPad Air.")
 
 show_details = st.sidebar.checkbox("Hiển thị chi tiết các bước", value=False)
@@ -88,14 +88,12 @@ def strip_ansi(text):
     ansi_regex = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_regex.sub('', text)
 
-async def query_processing_async(query_text, context_data, pipeline):
-    """Process query using ReAct pipeline."""
+async def query_processing_async(query_text, customer_context, pipeline):
+    """Process query using A2A pipeline."""
     try:
         result = await pipeline.run(
             query=query_text,
-            initial_context_data=context_data,
-            user_id=context_data.get("customer_name", "default_user"),
-            session_id=None
+            customer_context=customer_context
         )
         return result
     except Exception as e:
@@ -106,33 +104,44 @@ async def query_processing_async(query_text, context_data, pipeline):
             "error": str(e)
         }
 
+def _parse_json(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
 def display_task_outputs(result, show_details):
-    """Display task outputs if show_details is enabled."""
+    """Display agent outputs when detail view is enabled."""
     if not show_details:
         return
-    
+
+    agent_outputs = result.get("agent_outputs") or []
+    if not agent_outputs:
+        return
+
     with st.expander("Chi tiết các bước xử lý", expanded=False):
-        task_outputs = []
-        for i in range(1, 5):
-            task_key = f"task{i}_output"
-            if task_key in result and result[task_key]:
-                task_outputs.append(result[task_key])
-        
-        for i, task in enumerate(task_outputs, 1):
-            agent_name = task.get("agent", f"Agent {i}")
+        for idx, task in enumerate(agent_outputs, 1):
+            agent_name = task.get("agent", f"agent_{idx}")
             output = task.get("output", "")
-            
-            st.markdown(f"**{i}. {agent_name}**")
-            
-            try:
-                if isinstance(output, str):
-                    output_json = json.loads(output)
-                    st.json(output_json)
-                else:
-                    st.json(output)
-            except:
-                st.code(output[:500] + ("..." if len(output) > 500 else ""), language="text")
-            
+
+            st.markdown(f"**{idx}. {agent_name.title()}**")
+
+            parsed_output = _parse_json(output)
+            if isinstance(parsed_output, dict) and parsed_output.get("fallback_used"):
+                st.caption("⚠️ Đã dùng dữ liệu fallback vì agent trả về định dạng không hợp lệ.")
+
+            if parsed_output is not None:
+                st.json(parsed_output)
+            else:
+                clean_output = strip_ansi(output) if isinstance(output, str) else output
+                display_text = clean_output[:500] + ("..." if isinstance(clean_output, str) and len(clean_output) > 500 else "")
+                st.code(display_text, language="text")
+
             st.markdown("---")
 
 def display_order_details(order_details):
@@ -176,9 +185,10 @@ def main():
 
     query_text = st.chat_input("Hỏi Agentias điều gì đó...")
     if query_text:
-        initial_context = {
+        customer_context = {
             "conversation_id": st.session_state.session_id,
             "customer_name": customer_name,
+            "customer_phone": customer_phone,
             "previous_interactions": previous_interactions
         }
         
@@ -188,26 +198,24 @@ def main():
         with st.spinner("Đang xử lý yêu cầu của bạn..."):
             result = asyncio.run(query_processing_async(
                 query_text, 
-                initial_context,
+                customer_context,
                 st.session_state.pipeline
             ))
         
         final_answer = result.get("customer_response", "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này.")
+
         order_details = None
-        
-        task3_output = result.get("task3_output")
-        if task3_output:
-            try:
-                task3_data = task3_output.get("output", "") if isinstance(task3_output, dict) else task3_output
-                if isinstance(task3_data, str):
-                    task3_json = json.loads(task3_data)
-                else:
-                    task3_json = task3_data
-                    
-                if isinstance(task3_json, dict) and task3_json.get("order_created") and "order_details" in task3_json:
-                    order_details = task3_json["order_details"]
-            except Exception as e:
-                logger.debug(f"Could not extract order details: {e}")
+        agent_outputs = result.get("agent_outputs") or []
+        for task in agent_outputs:
+            if task.get("agent") == "order":
+                parsed = _parse_json(task.get("output"))
+                if isinstance(parsed, dict) and parsed.get("order_created") and parsed.get("order_details"):
+                    order_details = parsed.get("order_details") or {}
+                    customer_info = parsed.get("customer_info") or {}
+                    if isinstance(order_details, dict):
+                        order_details = order_details.copy()
+                        order_details["customer_info"] = customer_info
+                    break
         
         assistant_message = {"role": "assistant", "content": final_answer}
         if order_details:

@@ -1,9 +1,11 @@
 import asyncio
 from loguru import logger
 from src.pipeline_react import MultiAgentsReAct
+from src.pipeline_a2a import A2APipeline
 
 
-async def main():
+# Run the ReAct multi-agent pipeline
+async def run_react_pipeline():
     try:
         multi_agents = MultiAgentsReAct()
 
@@ -64,5 +66,75 @@ async def main():
     except Exception as e:
         logger.error(f"Lỗi nghiêm trọng trong pipeline: {e}", exc_info=True)
 
+
+
+def print_agent_cards(pipeline: A2APipeline):
+    for card in pipeline.list_registered_agents():
+        print(f"\n┌─ {card.display_name} ({'v' + card.version})")
+        print(f"│  ID: {card.name}")
+        print(f"│  Role: {card.role}")
+        print(f"│  Capabilities:")
+        for cap in card.capabilities:
+            print(f"│    • {cap}")
+        print(f"│  Input Schema: {list(card.input_schema.keys())}")
+        print(f"│  Output Schema: {list(card.output_schema.keys())}")
+        if card.endpoint:
+            print(f"│  Endpoint: {card.endpoint}")
+        print(f"└─")
+
+
+# Run the A2A pipeline tests
+async def run_a2a_pipeline():
+    pipeline = A2APipeline()
+    
+    print_agent_cards(pipeline)
+    
+    test_queries = [
+        {
+            "query": "Tôi muốn mua iPhone 15 Pro Max 256GB màu Titan tự nhiên còn hàng không? Giá bao nhiêu?",
+            "customer_context": {
+                "customer_name": "Nguyễn Văn Trọng",
+                "phone": "0123456789"
+            }
+        },
+        {
+            "query": "Tôi muốn mua 1 chiếc iPhone 15 Pro Max 256GB màu Titan tự nhiên.",
+            "customer_context": {
+                "customer_name": "Nguyễn Văn Trọng",
+                "phone": "0123456789"
+            }
+        },
+    ]
+    
+    for i, test_case in enumerate(test_queries, 1):
+        print(f"Query: {test_case['query']}")
+        print(f"Customer: {test_case['customer_context']}")
+        
+        try:
+            result = await pipeline.run(
+                query=test_case['query'],
+                customer_context=test_case['customer_context']
+            )
+            
+            print(f"\nFinal Response:\n{result['customer_response']}")
+            print(f"\nSession ID: {result['session_id']}")
+            print(f"Status: {result['status']}")
+            
+            print(f"\n{'='*80}")
+            print(f"AGENT INTERACTION TRACE")
+            for output in result['agent_outputs']:
+                print(f"\n[{output['agent'].upper()}]")
+                print(f"{output['output']}")
+            
+            await asyncio.sleep(2)
+            
+        except Exception as e:
+            logger.error(f"Error in test case {i}: {e}", exc_info=True)
+            continue
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(run_react_pipeline())
+    
+    # of
+    
+    asyncio.run(run_a2a_pipeline())
