@@ -65,13 +65,14 @@ Both pipelines share the same specialist agents and MCP server infrastructure; t
 - **Agent-to-Agent**: Agent Card registry with tool handlers invoking MCP directly
 
 ## 🚀 Features
-- ✅ **Deterministic Tool Calls**: A2A handlers parse JSON/function-call args and invoke MCP tools directly
-- ✅ **MCP SSE Integration**: Async communication with MCP server via Server-Sent Events
-- ✅ **Real-time Inventory Lookup**: Query product availability, pricing, and stock quantities
-- ✅ **Order Management**: Create, persist, and track customer orders
-- ✅ **Robust Parsing**: Resilient JSON/function-call extraction with structured fallbacks
-- ✅ **Session Management**: Maintain conversation context across multiple turns
-- ✅ **Streamlit UI**: User-friendly chat interface with agent traces and order cards
+- **A2A Communication**: AgentRegistry as phone book: it stores the card, the agent’s Runner, and a callable handler keyed by the card name.
+- **Deterministic Tool Calls**: A2A handlers parse JSON/function-call args and invoke MCP tools directly
+- **MCP SSE Integration**: Async communication with MCP server via Server-Sent Events
+- **Real-time Inventory Lookup**: Query product availability, pricing, and stock quantities
+- **Order Management**: Create, persist, and track customer orders
+- **Robust Parsing**: Resilient JSON/function-call extraction with structured fallbacks
+- **Session Management**: Maintain conversation context across multiple turns
+- **Streamlit UI**: User-friendly chat interface with agent traces and order cards
 
 ## 📋 Prerequisites
 
