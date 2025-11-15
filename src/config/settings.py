@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-load_dotenv()
+load_dotenv(override=True)
 
 class APIConfig(BaseSettings):
     base_url_llm: str = Field(
@@ -15,7 +15,7 @@ class APIConfig(BaseSettings):
         alias="API_KEY",
     )
     llm_model: str = Field(
-        default="Qwen/Qwen3-4B-AWQ",
+        default="openai/Qwen/Qwen3-8B",
         description="Large Language model name to be used (e.g., GPT-4)",
         alias="LLM_MODEL",
     )
@@ -71,6 +71,38 @@ class MongodbConfig(BaseSettings):
     )
 
 
+class A2AServiceConfig(BaseSettings):
+    base_host: str = Field(
+        default="http://localhost",
+        description="Base host (with scheme) for all remote A2A agents",
+        alias="A2A_BASE_HOST",
+    )
+    analysis_port: int = Field(
+        default=9101,
+        description="Port for Analysis Agent service",
+        alias="A2A_ANALYSIS_PORT",
+    )
+    inventory_port: int = Field(
+        default=9102,
+        description="Port for Inventory Agent service",
+        alias="A2A_INVENTORY_PORT",
+    )
+    order_port: int = Field(
+        default=9103,
+        description="Port for Order Agent service",
+        alias="A2A_ORDER_PORT",
+    )
+    consultant_port: int = Field(
+        default=9104,
+        description="Port for Consultant Agent service",
+        alias="A2A_CONSULTANT_PORT",
+    )
+
+    def build_agent_base(self, port: int) -> str:
+        host = self.base_host.rstrip('/')
+        return f"{host}:{port}"
+
+
 class Role(str, Enum):
     SYSTEM = "system"
     USER = "user"
@@ -81,3 +113,4 @@ api_config = APIConfig()
 llm_config = LLMConfig()
 mcp_config = MCPConfig()
 db_config = MongodbConfig()
+a2a_service_config = A2AServiceConfig()
