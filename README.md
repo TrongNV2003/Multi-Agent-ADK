@@ -6,11 +6,11 @@
 A sophisticated multi-agent system for e-commerce consultation and order processing, powered by **Google ADK** and **Model Context Protocol (MCP)** with Server-Sent Events (SSE) architecture. Since November 2025 the project ships two complementary orchestration modes:
 
 - **ReAct Pipeline** – the original reasoning + acting loop with explicit tool calls typed by the LLM
-- **A2A Agent-Card Pipeline** – a modular Agent-to-Agent architecture where each specialist agent exposes a “card” and communicates through the registry, while handlers call MCP tools directly to guarantee deterministic execution
+- **A2A Pipeline** – The A2A pipeline follows the Microservice Achitecture recommended by Google ADK: every specialist agent is deployed as its own uvicorn service via `to_a2a()`, and the orchestrator talks to them through the official A2A protocol using `RemoteA2aAgent`.
 
 ## 🎯 Overview
 
-This system implements an intelligent sales assistant using a ReAct (Reasoning + Acting) pattern with multiple specialized agents that collaborate to:
+This system implements an sales Agent using sequential pattern with multiple agents communicate through A2A protocol that collaborate to:
 - Analyze customer inquiries and product requirements
 - Check real-time inventory availability and pricing
 - Process and persist customer orders
@@ -24,25 +24,30 @@ The agents communicate with an MCP SSE server that interfaces with MongoDB for p
 #### ReAct Pattern
 ```
 User Query → Analysis Agent → Inventory Agent → Order Agent → Consultant Agent → Response
-                    ↓              ↓               ↓
+                    ↓              ↓                ↓
                     └──────── Tool Executor ────────┘
-                                    ↓
+                                   ↓
                             MCP SSE Server
-                                    ↓
+                                   ↓
                                 MongoDB
 ```
 
-#### Agent Card (A2A) Pattern
+#### Microservice Agent (A2A) Pattern
 ```
-User Query → Analysis Agent
-                    ↓ (registry lookup)
-                  Inventory Agent ──┐
-                    ↓               │
-                  Order Agent ──────┘
-                    ↓
-                  Consultant Agent → Final Response
+User Query → Analysis Agent Service (A2A :9101)
+                              │
+                              │  (AgentRegistry + RemoteA2aAgent)
+                              ▼
+        ┌────────── Inventory Agent Service (A2A :9102)
+        │
+        │
+        └────────── Order Agent Service (A2A :9103)
+                              │
+                              ▼
+            Consultant Agent Service (A2A :9104) → Final Response
 
-MCP tools are triggered inside dedicated handlers so every call hits the real SSE server.
+Each agent runs in a separate uvicorn microservice, generating agent cards at `/.well-known/agent-card`. 
+The Orchestrator uses `RemoteA2aAgent` to send the A2A payload to each service, and the agent itself is responsible for calling the MCP tools.
 ```
 
 Both pipelines share the same specialist agents and MCP server infrastructure; the difference lies in how control flows between them.
@@ -65,8 +70,8 @@ Both pipelines share the same specialist agents and MCP server infrastructure; t
 - **Agent-to-Agent**: Agent Card registry with tool handlers invoking MCP directly
 
 ## 🚀 Features
-- **A2A Communication**: AgentRegistry as phone book: it stores the card, the agent’s Runner, and a callable handler keyed by the card name.
-- **Deterministic Tool Calls**: A2A handlers parse JSON/function-call args and invoke MCP tools directly
+- **A2A Communication**: AgentRegistry + `RemoteA2aAgent` act as the phone book/client to the remote microservices (each service exposes an agent card via `to_a2a`).
+- **Deterministic Tool Calls**: Remote inventory/order services own the MCP calls, ensuring every request hits the SSE server the same way
 - **MCP SSE Integration**: Async communication with MCP server via Server-Sent Events
 - **Real-time Inventory Lookup**: Query product availability, pricing, and stock quantities
 - **Order Management**: Create, persist, and track customer orders
@@ -92,8 +97,8 @@ cd agentADK
 
 2. **Create and activate conda environment**
 ```bash
-conda create -n trongnv python=3.11
-conda activate trongnv
+conda create -n agentadk python=3.11
+conda activate agentadk
 ```
 
 3. **Install dependencies**
@@ -129,8 +134,7 @@ This will start:
 ### Start MCP SSE Server
 
 ```bash
-conda activate trongnv
-python mcp_server.py
+conda activate agentadk && python mcp_server.py
 ```
 
 The MCP server exposes:
@@ -140,27 +144,48 @@ The MCP server exposes:
   - `create_order`: Persist customer orders
   - `get_order`: Retrieve order details
 
-### Run Multi-Agent Pipelines (CLI)
+### Start Remote A2A Microservices
+
+Run each agent in a separate terminal. The default ports can be changed via the `A2A_*` environment variables in `.env`.
+
+**Terminal 1 – Analysis Agent:**
+```bash
+conda activate agentadk && python -m uvicorn src.a2a_services.analysis_agent:app --host 0.0.0.0 --port 9101
+```
+
+**Terminal 2 – Inventory Agent:**
+```bash
+conda activate agentadk && python -m uvicorn src.a2a_services.inventory_agent:app --host 0.0.0.0 --port 9102
+```
+
+**Terminal 3 – Order Agent:**
+```bash
+conda activate agentadk && python -m uvicorn src.a2a_services.order_agent:app --host 0.0.0.0 --port 9103
+```
+
+**Terminal 4 – Consultant Agent:**
+```bash
+conda activate agentadk && python -m uvicorn src.a2a_services.consultant_agent:app --host 0.0.0.0 --port 9104
+```
+
+**Check Agent Card:**
+```bash
+# Analysis Agent card
+curl http://localhost:9101/.well-known/agent-card
+```
+
+### Run Multi-Agent Pipelines
+
+**Make sure the MCP SSE server and all A2A microservices are running before activating the pipeline.**
 
 ```bash
-conda activate trongnv
-python main.py
-```
-
-Example interaction:
-```
-User: "Tôi muốn mua iPhone 15 Pro Max 256GB màu Titan tự nhiên còn hàng không? Giá bao nhiêu?"
-
-Agent Response:
-"Chào bạn! iPhone 15 Pro Max 256GB màu Titan tự nhiên hiện đang có sẵn với giá 27,990,000 VNĐ. 
-Chúng tôi còn 3 máy trong kho. Bạn có muốn đặt hàng ngay không?"
+conda activate agentadk && python main.py
 ```
 
 ### Run Streamlit UI
 
 ```bash
-conda activate trongnv
-python -m streamlit run src/ui/app.py
+conda activate agentadk && python -m streamlit run src/ui/app.py
 ```
 
 Navigate to `http://localhost:8501` in your browser.
@@ -177,11 +202,18 @@ Navigate to `http://localhost:8501` in your browser.
 agentADK/
 ├── src/
 │   ├── agents/
-│   │   ├── agents.py              # Original agent definitions
 │   │   ├── agents_react.py        # ReAct-style agents with tool instructions
-│   │   └── agents_a2a.py          # Agent Card metadata and registry
+│   │   └── routes.py              # RemoteA2aAgent wrappers (point to microservices)
+│   ├── a2a_services/              # ⭐ Remote A2A microservices (uvicorn + to_a2a)
+│   │   ├── __init__.py
+│   │   ├── base.py                # Shared LLM client factory
+│   │   ├── analysis_agent.py      # Analysis microservice (:9101)
+│   │   ├── inventory_agent.py     # Inventory microservice (:9102)
+│   │   ├── order_agent.py         # Order microservice (:9103)
+│   │   ├── consultant_agent.py    # Consultant microservice (:9104)
+│   │   └── README.md              # Microservice deployment guide
 │   ├── handlers/
-│   │   └── invoke_agents.py       # A2A handlers executing MCP tools
+│   │   └── invoke_agents.py       # (Legacy) Handlers for local pipeline
 │   ├── tools/
 │   │   ├── get_products.py        # MCP inventory lookup wrapper
 │   │   └── create_order.py        # MCP order creation wrapper
@@ -189,14 +221,13 @@ agentADK/
 │   │   ├── react_executor.py      # Tool call parser/executor for ReAct
 │   │   └── metrics.py             # Performance metrics
 │   ├── config/
-│   │   ├── settings.py            # Environment configuration
+│   │   ├── settings.py            # Env config + A2AServiceConfig
 │   │   └── schemas.py             # Pydantic data models
 │   ├── db/
 │   │   ├── connector.py           # MongoDB connection
 │   │   └── insert_data.py         # Sample data insertion
 │   ├── ui/
 │   │   └── app.py                 # Streamlit interface (A2A)
-│   ├── pipeline.py                # Original multi-agent pipeline
 │   ├── pipeline_react.py          # ReAct pipeline with manual tool execution
 │   └── pipeline_a2a.py            # Agent Card pipeline orchestrator
 │
@@ -210,7 +241,7 @@ agentADK/
 
 ## Acknowledgments
 - **Google ADK**: Agent framework and orchestration
-- **Model Context Protocol**: Standardized tool-calling protocol
+- **Model Context Protocol (MCP)**: Standardized tool-calling protocol
 - **LiteLLM**: Unified LLM API interface
 - **vLLM**: High-performance inference server
-- **Streamlit**: Rapid UI prototyping
+- **Streamlit**: UI prototyping
