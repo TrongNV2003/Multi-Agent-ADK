@@ -21,36 +21,12 @@ The agents communicate with an MCP SSE server that interfaces with MongoDB for p
 ## 🏗️ Architecture
 
 ### Agent Pipelines
-#### ReAct Pattern
-```
-User Query → Analysis Agent → Inventory Agent → Order Agent → Consultant Agent → Response
-                    ↓              ↓                ↓
-                    └──────── Tool Executor ────────┘
-                                   ↓
-                            MCP SSE Server
-                                   ↓
-                                MongoDB
-```
-
 #### Microservice Agent (A2A) Pattern
-```
-User Query → Analysis Agent Service (A2A :9101)
-                              │
-                              │  (AgentRegistry + RemoteA2aAgent)
-                              ▼
-        ┌────────── Inventory Agent Service (A2A :9102)
-        │
-        │
-        └────────── Order Agent Service (A2A :9103)
-                              │
-                              ▼
-            Consultant Agent Service (A2A :9104) → Final Response
+![Example](assets/architecture.png)
 
-Each agent runs in a separate uvicorn microservice, generating agent cards at `/.well-known/agent-card`. 
+Each agent runs in a separate uvicorn microservice, generating agent cards at `/.well-known/agent-card.json`.
+
 The Orchestrator uses `RemoteA2aAgent` to send the A2A payload to each service, and the agent itself is responsible for calling the MCP tools.
-```
-
-Both pipelines share the same specialist agents and MCP server infrastructure; the difference lies in how control flows between them.
 
 ### Core Agents
 
@@ -245,3 +221,6 @@ agentADK/
 - **LiteLLM**: Unified LLM API interface
 - **vLLM**: High-performance inference server
 - **Streamlit**: UI prototyping
+
+## Output
+![Example](assets/output.png)
