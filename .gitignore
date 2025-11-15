@@ -2,6 +2,7 @@
 1.py
 .idea/
 .vscode/
+.github/
 error_output
 nice_output
 config.yaml
