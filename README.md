@@ -171,7 +171,7 @@ conda activate agentadk && python -m uvicorn src.a2a_services.consultant_agent:a
 **Check Agent Card:**
 ```bash
 # Analysis Agent card
-curl http://localhost:9101/.well-known/agent-card
+curl http://localhost:9101/.well-known/agent-card.json
 ```
 
 ### Run Multi-Agent Pipelines
