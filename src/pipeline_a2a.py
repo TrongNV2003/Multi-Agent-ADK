@@ -4,11 +4,9 @@ from loguru import logger
 
 from google.genai import types
 from google.adk.runners import Runner
-from google.adk.models.lite_llm import LiteLlm
 from google.adk.sessions import InMemorySessionService
 
-from src.agents.agents_a2a import (
-    AgentCard,
+from src.agents.routes import (
     AgentRegistry,
     AnalysisAgent,
     InventoryAgent,
@@ -19,7 +17,6 @@ from src.handlers.invoke_agents import (
     handle_inventory_agent_call,
     handle_order_agent_call
 )
-from src.config.settings import api_config
 
 
 class A2APipeline:
@@ -27,23 +24,17 @@ class A2APipeline:
     Pipeline using Agent-to-Agent communication (Agent Card pattern).
     Flow: User → Analysis → [Inventory, Order] → Consultant → Response.
     """
-    
     def __init__(self):
         self.app_name = "a2a_pipeline"
-        self.client = LiteLlm(
-            model="openai/Qwen/Qwen3-8B",
-            api_base=api_config.base_url_llm,
-            api_key=api_config.api_key,
-        )
         
         self.session_service = InMemorySessionService()
         
         self.registry = AgentRegistry()
         
-        self.analysis_agent = AnalysisAgent(self.client)
-        self.inventory_agent = InventoryAgent(self.client)
-        self.order_agent = OrderAgent(self.client)
-        self.consultant_agent = ConsultantAgent(self.client)
+        self.analysis_agent = AnalysisAgent()
+        self.inventory_agent = InventoryAgent()
+        self.order_agent = OrderAgent()
+        self.consultant_agent = ConsultantAgent()
         
         self.analysis_runner = Runner(
             agent=self.analysis_agent.agent,
@@ -69,19 +60,19 @@ class A2APipeline:
             session_service=self.session_service
         )
         
-        # Each agent is independent and registered via its AgentCard
-        logger.info("[Pipeline] Registering agents with their cards...")
+        # Each agent is independent and registered via registry
+        logger.info("[Pipeline] Registering agents with their handlers")
         self.registry.register(
-            card=InventoryAgent.CARD,
-            runner=self.inventory_runner,
+            name="inventory_agent",
+            agent=self.inventory_agent.agent,
             handler=lambda query, context: handle_inventory_agent_call(
                 query, context, self.inventory_runner, self.inventory_agent
             )
         )
         
         self.registry.register(
-            card=OrderAgent.CARD,
-            runner=self.order_runner,
+            name="order_agent",
+            agent=self.order_agent.agent,
             handler=lambda query, inventory_info, customer_info: handle_order_agent_call(
                 query, inventory_info, customer_info, self.order_runner, self.order_agent
             )
@@ -96,9 +87,9 @@ class A2APipeline:
             session_id=f"{base_session.id}:{agent_name}"
         )
     
-    def list_registered_agents(self) -> list[AgentCard]:
+    def list_registered_agents(self) -> list[str]:
         """
-        Get list of all registered agents (via their cards)
+        Get list of all registered agent names
         Useful for debugging and monitoring
         """
         return self.registry.list_agents()
@@ -127,7 +118,7 @@ class A2APipeline:
         Returns:
             Dict with response and metadata
         """
-        logger.info(f"[A2A Pipeline] Starting for query: {query}")
+        logger.info(f"\n\n[A2A Pipeline] Query: {query}")
         
         import uuid
 
@@ -140,13 +131,11 @@ class A2APipeline:
             session_id=session_id
         )
         
-        logger.debug(f"Session: {session_id}")
+        logger.info(f"Session: {session_id}")
         
         agent_outputs = []
         
-        # STEP 1: Analysis Agent
-        logger.info("[Step 1] Running Analysis Agent...")
-        
+        # Analysis Agent
         analysis_session = await self._create_agent_session(self.analysis_runner, session)
         message = types.Content(role="user", parts=[types.Part(text=query)])
         analysis_result = ""
@@ -161,9 +150,8 @@ class A2APipeline:
                 break
         
         agent_outputs.append({"agent": "analysis", "output": analysis_result})
-        logger.debug(f"Analysis output: {analysis_result}")
+        logger.debug(f"Analysis Agent response: {analysis_result}")
         
-        # Parse analysis
         try:
             analysis_data = json.loads(analysis_result)
         except:
@@ -173,11 +161,10 @@ class A2APipeline:
                 "requires_order_placement": False
             }
         
-        # STEP 2: Call Inventory Agent via Registry (if required)
+        # Call Inventory Agent via Registry (if required)
         inventory_result = ""
         inventory_data: Dict[str, Any] = {}
         if analysis_data.get("requires_inventory_check"):
-            logger.info("[Step 2] Calling Inventory Agent via registry...")
             handler = self.registry.get_handler("inventory_agent")
             if handler:
                 try:
@@ -198,11 +185,11 @@ class A2APipeline:
             else:
                 logger.error("[A2A Pipeline] Inventory agent handler not found in registry")
         
-        # STEP 3: Call Order Agent via Registry (if required)
+        
+        # Call Order Agent via Registry (if required)
         order_result = ""
         order_data: Dict[str, Any] = {}
         if analysis_data.get("requires_order_placement"):
-            logger.info("[Step 3] Calling Order Agent via registry...")
             handler = self.registry.get_handler("order_agent")
             if handler:
                 try:
@@ -227,15 +214,18 @@ class A2APipeline:
             else:
                 logger.error("[A2A Pipeline] Order agent handler not found in registry")
         
-        # STEP 4: Consultant Agent (generate natural response)
-        logger.info("[Step 4] Running Consultant Agent...")
-        
+        # Call Consultant Agent (response)
         customer_info = customer_context or {
             "customer_name": "Khách hàng",
             "conversation_id": session_id
         }
         
         consultant_prompt = f"""
+Bạn là Agentias, một Consultant Agent chuyên phản hồi khách hàng dựa trên thông tin từ các agent khác.
+Đây là thông tin cá nhân của bạn:
+Bạn tên là Agentias, làm việc tại cửa hàng điện thoại di động ABC.
+Số điện thoại liên hệ của cửa hàng: 19006789.
+
 Tạo câu trả lời cuối cho khách hàng dựa trên:
 
 Customer Query: {query}
@@ -249,11 +239,14 @@ Inventory Result:
 Order Result:
 {order_result if order_result else "Không tạo đơn"}
 
-Customer Info:
+Thông tin cá nhân của khách hàng:
 {json.dumps(customer_info, ensure_ascii=False, indent=2)}
 
-Hãy trả lời thân thiện bằng tiếng Việt.
-Không sử dụng /*PLANNING*/, không đưa mã nguồn hoặc pseudo-code, chỉ trả lời bằng đoạn văn hoàn chỉnh.
+YÊU CẦU:
+- Trả lời thân thiện bằng tiếng Việt
+- KHÔNG đưa số điện thoại của khách hàng trong câu trả lời (đây là thông tin cá nhân của họ)
+- Không sử dụng /*PLANNING*/, không đưa mã nguồn hoặc pseudo-code
+- Chỉ trả lời bằng đoạn văn hoàn chỉnh
 """
         
         consultant_session = await self._create_agent_session(self.consultant_runner, session)
@@ -271,7 +264,15 @@ Không sử dụng /*PLANNING*/, không đưa mã nguồn hoặc pseudo-code, ch
         
         agent_outputs.append({"agent": "consultant", "output": final_response})
         
-        # Return Result
+        if isinstance(final_response, str):
+            final_response = final_response.strip()
+            if final_response.startswith("{") and final_response.endswith("}"):
+                try:
+                    parsed = json.loads(final_response)
+                    final_response = parsed.get("response", final_response)
+                except json.JSONDecodeError:
+                    pass
+        
         result = {
             "customer_response": final_response or "Xin lỗi, tôi không thể xử lý yêu cầu lúc này.",
             "agent_outputs": agent_outputs,
@@ -279,5 +280,6 @@ Không sử dụng /*PLANNING*/, không đưa mã nguồn hoặc pseudo-code, ch
             "status": "success"
         }
         
+        logger.info(f"[A2A Pipeline] Consultant Agent response: {final_response}")
         logger.info(f"[A2A Pipeline] Completed for session: {session_id}")
         return result

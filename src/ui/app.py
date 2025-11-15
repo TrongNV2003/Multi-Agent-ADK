@@ -171,6 +171,17 @@ def main():
         import uuid
         st.session_state.session_id = str(uuid.uuid4())
         logger.info(f"New session created: {st.session_state.session_id}")
+    
+    # Tạo hoặc lấy event loop cho session này
+    if "event_loop" not in st.session_state:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                raise RuntimeError("Loop is closed")
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        st.session_state.event_loop = loop
 
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     for message in st.session_state.chat_history:
@@ -196,7 +207,9 @@ def main():
         st.markdown(f'<div class="chat-container"><div class="chat"><div class="user-message">{query_text}</div></div></div>', unsafe_allow_html=True)
         
         with st.spinner("Đang xử lý yêu cầu của bạn..."):
-            result = asyncio.run(query_processing_async(
+            # Dùng loop đã tồn tại thay vì tạo mới
+            loop = st.session_state.event_loop
+            result = loop.run_until_complete(query_processing_async(
                 query_text, 
                 customer_context,
                 st.session_state.pipeline
@@ -234,7 +247,7 @@ def main():
         
         if result.get("status") == "success":
             st.sidebar.success(f"✅ Request processed successfully")
-            st.sidebar.info(f"Session: {result.get('session_id', 'N/A')[:8]}...")
+            st.sidebar.info(f"Session: {result.get('session_id', 'N/A')[:12]}...")
         else:
             st.sidebar.error(f"Error: {result.get('error', 'Unknown error')}")
         

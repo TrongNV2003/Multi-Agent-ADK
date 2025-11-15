@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import signal
 from loguru import logger
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
@@ -10,17 +11,44 @@ from src.db.connector import MongoDBClient
 
 mcp = FastMCP("mcp server")
 
-"""
-Remember to start mongodb server before running this MCP server:
-    sudo systemctl start mongod
-"""
 
-try:
-    db_client = MongoDBClient()
-    logger.info("MongoDB client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize MongoDB client: {str(e)}")
-    db_client = None
+db_client = None
+
+def check_mongodb_connection(timeout: int = 5):
+    class TimeoutException(Exception):
+        pass
+
+    def timeout_handler(signum, frame):
+        raise TimeoutException("Kết nối MongoDB timeout!")
+
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout)
+
+    try:
+        client = MongoDBClient()
+        client.get_client().admin.command('ping')
+        logger.info("MongoDB connected successfully!")
+        signal.alarm(0)
+        return client
+    except TimeoutException:
+        logger.error("Remember to start mongodb server before running this MCP server:")
+        logger.error("   sudo systemctl start mongod")
+        signal.alarm(0)
+        return None
+    except Exception as e:
+        logger.error(f"Error connecting to MongoDB: {str(e)}")
+        logger.error("Remember to start mongodb server before running this MCP server:")
+        logger.error("   sudo systemctl start mongod")
+        signal.alarm(0)
+        return None
+    finally:
+        signal.alarm(0)
+
+db_client = check_mongodb_connection(timeout=5)
+
+if db_client is None:
+    logger.critical("MCP server cannot start due to missing MongoDB")
+    exit(1)
 
 
 @mcp.tool(name="create_order")
@@ -42,14 +70,16 @@ def create_order(order_details: dict) -> str:
         if "order_details" in input_data:
             input_data = input_data["order_details"]
 
-        required_fields = ["order_id", "product", "color", "storage", "quantity", "total_price", "customer_info"]
+        required_fields = ["product", "color", "storage", "quantity", "total_price", "customer_info"]
         missing_fields = [field for field in required_fields if field not in input_data]
         if missing_fields:
             return f"Error: Missing required fields: {', '.join(missing_fields)}"        
 
+        order_id = f"order_{uuid.uuid4().hex[:16]}"
+        
         standard_order = {
             "order_details": {
-                "order_id": input_data.get("order_id", f"{uuid.uuid4()}"),
+                "order_id": order_id,
                 "product": input_data.get("product", "Unknown Product"),
                 "color": input_data.get("color", "Unknown Color"),
                 "storage": input_data.get("storage", "Unknown Storage"),
@@ -66,7 +96,7 @@ def create_order(order_details: dict) -> str:
         order_id = standard_order["order_details"]["order_id"]
         conversation_id = standard_order["order_details"]["customer_info"]["conversation_id"]
 
-        filename_base = f"order_{order_id}_{conversation_id}"
+        filename_base = f"{order_id}_{conversation_id}"
         filename = f"{filename_base}.json"
         filepath = os.path.join(orders_dir, filename)
 

@@ -1,23 +1,23 @@
 import json
 import asyncio
-from typing import Optional
 from loguru import logger
+from typing import Optional
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
 
 async def get_product_info_async(
-    product: str, 
-    storage: Optional[str] = None, 
-    color: Optional[str] = None, 
-    max_retries: int = 3, 
+    product: str,
+    storage: Optional[str] = None,
+    color: Optional[str] = None,
+    max_retries: int = 3,
     timeout: int = 15
 ) -> str:
     last_error = None
     
     for attempt in range(max_retries):
         try:
-            logger.debug(f"Attempt {attempt + 1}/{max_retries} to get product info")
+            logger.info(f"Attempt {attempt + 1}/{max_retries} to get product info")
             
             kwargs = {"product": product}
             if storage:
@@ -28,7 +28,7 @@ async def get_product_info_async(
             async with sse_client(url="http://localhost:8000/sse") as (read, write):
                 async with ClientSession(read, write) as session:
                     await asyncio.wait_for(session.initialize(), timeout=timeout)
-                    logger.debug(f"MCP session initialized")
+                    logger.info(f"MCP session initialized")
                     
                     result = await asyncio.wait_for(
                         session.call_tool("get_product_info", kwargs),
@@ -47,7 +47,7 @@ async def get_product_info_async(
                         result_text = str(result)
                     
                     if result_text:
-                        logger.info(f"Successfully retrieved product info on attempt {attempt + 1}")
+                        logger.info(f"Successfully retrieved product info")
                         return result_text
                     else:
                         raise ValueError("Empty response from server")

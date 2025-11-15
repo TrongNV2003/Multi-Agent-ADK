@@ -16,13 +16,13 @@ async def create_order_async(
     
     for attempt in range(max_retries):
         try:
-            logger.debug(f"Attempt {attempt + 1}/{max_retries} to create order")
+            logger.info(f"Attempt {attempt + 1}/{max_retries} to create order")
             logger.debug(f"Order details: {order_details}")
             
             async with sse_client(url="http://localhost:8000/sse") as (read, write):
                 async with ClientSession(read, write) as session:
                     await asyncio.wait_for(session.initialize(), timeout=timeout)
-                    logger.debug(f"MCP session initialized")
+                    logger.info(f"MCP session initialized")
                     
                     result = await asyncio.wait_for(
                         session.call_tool("create_order", {"order_details": order_details}),
@@ -42,7 +42,7 @@ async def create_order_async(
                     
                     if result_text:
                         if "successfully" in result_text.lower() or "success" in result_text.lower():
-                            logger.info(f"Successfully created order on attempt {attempt + 1}")
+                            logger.info(f"Successfully created order")
                         elif "error" in result_text.lower():
                             logger.error(f"Server returned error: {result_text}")
                         return result_text

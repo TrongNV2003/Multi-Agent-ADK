@@ -22,7 +22,11 @@ class MongoDBClient:
         except ConnectionFailure as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise
-
+            
+    def get_client(self) -> MongoClient:
+        """Get the MongoDB client instance."""
+        return self.client
+    
     def insert_product(self, product: Dict[str, Any]) -> str:
         """
         Insert a product into MongoDB.

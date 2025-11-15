@@ -68,26 +68,22 @@ async def run_react_pipeline():
 
 
 
-def print_agent_cards(pipeline: A2APipeline):
-    for card in pipeline.list_registered_agents():
-        print(f"\n┌─ {card.display_name} ({'v' + card.version})")
-        print(f"│  ID: {card.name}")
-        print(f"│  Role: {card.role}")
-        print(f"│  Capabilities:")
-        for cap in card.capabilities:
-            print(f"│    • {cap}")
-        print(f"│  Input Schema: {list(card.input_schema.keys())}")
-        print(f"│  Output Schema: {list(card.output_schema.keys())}")
-        if card.endpoint:
-            print(f"│  Endpoint: {card.endpoint}")
-        print(f"└─")
+def print_agent_info(pipeline: A2APipeline):
+    """Print registered agents information"""
+    agent_names = pipeline.list_registered_agents()
+    print(f"\nRegistered Agents ({len(agent_names)}):")
+    for name in agent_names:
+        agent = pipeline.registry.get_agent(name)
+        if agent:
+            print(f"  {name}: {agent.description}")
+    print()
 
 
 # Run the A2A pipeline tests
 async def run_a2a_pipeline():
     pipeline = A2APipeline()
     
-    print_agent_cards(pipeline)
+    print_agent_info(pipeline)
     
     test_queries = [
         {
@@ -135,6 +131,6 @@ async def run_a2a_pipeline():
 if __name__ == "__main__":
     # asyncio.run(run_react_pipeline())
     
-    # of
+    # or
     
     asyncio.run(run_a2a_pipeline())
